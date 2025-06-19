@@ -316,6 +316,28 @@ pub async fn run(dsn: String) -> Result<()> {
     c3.assert_query("SELECT * FROM target_rb;", vec![(100,)]).await;
     c3.assert_query("SELECT count(*) FROM s_rb;", vec![(0,)]).await;
 
+
+    //----------------------------------------------------------------------------------
+    // Concurrent mutation with zero retention period
+    //----------------------------------------------------------------------------------
+
+    c1.exec("create table t_zero_retention(c int);").await?;
+    c1.exec("set data_retention_time_in_days= 0;").await?;
+    c1.begin().await?;
+    c1.exec("insert into t_zero_retention values(1);").await?;
+
+    c2.exec("set data_retention_time_in_days= 0;").await?;
+    c2.begin().await?;
+    c2.exec("insert into t_zero_retention values(2);").await?;
+    c2.commit().await?;
+    c2.exec("call system$fuse_vacuum2('test_txn', 't_zero_retention');").await?;
+
+    c1.commit().await?;
+
+    c3.assert_query("SELECT * FROM t_zero_retention;", vec![(1,), (2,)]).await;
+
+
+
     println!("All tests passed!");
     Ok(())
 }
